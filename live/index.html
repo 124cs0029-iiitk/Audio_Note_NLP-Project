@@ -1771,6 +1771,7 @@
 
       reportEl.innerHTML = "";
       reportEl.appendChild(el("h3", headingTitle));
+      reportEl.appendChild(el("div", data.rules ? "Rules version: " + data.rules : "Rules version: old (restart the server, then press Regenerate report)", "stats"));
       reportEl.appendChild(el("h4", "Summary"));
 
       const sum = el("div", undefined, "summary");
@@ -1921,6 +1922,29 @@
       }
 
       const row = el("div", undefined, "actions-row");
+
+      const regenBtn = el("button", "Regenerate report", "btn secondary small");
+      regenBtn.onclick = async () => {
+        regenBtn.disabled = true;
+        regenBtn.textContent = "Regenerating...";
+        const mode = data.mode === "lecture" ? "lecture" : "meeting";
+        try {
+          const res = await fetch("/api/report/" + encodeURIComponent(meetingId) + "?mode=" + mode + "&user=" + encodeURIComponent(userScopeKey()), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ user: userScopeKey(), segments: [] })
+          });
+          if (!res.ok) throw new Error("server error " + res.status);
+          const fresh = await res.json();
+          fresh.filename = data.filename;
+          cacheReportLocal(meetingId, mode, fresh);
+          showReport(fresh);
+        } catch (err) {
+          regenBtn.textContent = "Failed: " + err.message;
+          regenBtn.disabled = false;
+        }
+      };
+      row.appendChild(regenBtn);
 
       const pdfBtn = el("button", "Download (.PDF)", "btn secondary small");
       pdfBtn.onclick = () => downloadPdf(data, fileBase);

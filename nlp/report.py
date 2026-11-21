@@ -12,12 +12,12 @@ sys.path.insert(0, str(Path(__file__).parent))     # so that lecture.py (same fo
 
 DB_PATH = Path(__file__).parent.parent / "data" / "meetings.db"
 NER_NAME = "dslim/bert-base-NER"
-SUM_NAME = "philschmid/bart-large-cnn-samsum"          # meetings (chat-style text)
-LECTURE_SUM_NAME = "facebook/bart-large-cnn"            # lectures; "sshleifer/distilbart-cnn-12-6" is smaller
+SUM_NAME = "philschmid/bart-large-cnn-samsum"          # the summarizer (meetings and lectures)
 
 CHUNK_TOKENS = 300          # first level: small pieces, so details survive
 GROUP_TOKENS = 700          # higher levels: group the partial summaries
 MAX_SUMMARY_WORDS = 250     # stop summarizing again when the text is this short
+RULES_VERSION = "tasks-v4"  # shown under the title of every report: tells which code made it
 
 _models = {}
 
@@ -121,12 +121,22 @@ SENT_SPLIT = re.compile(
     r"(?<!\bDr\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bMrs\.)(?<!\bProf\.)(?<=[.?!])\s+")
 ACCEPT_RE = re.compile(r"^(?:yes|yeah|sure|okay|ok|alright|of course|absolutely)\b", re.I)
 SELF_RE = re.compile(
-    r"\b(I|we)\s*(?:(?:still|also|just|really|definitely|probably)\s+)?"
-    r"(?:will|'ll|am going to|'m going to|can|need to|have to|must|should)\s+(.+)$", re.I)
+    r"\b(?P<who>I|we)\s*(?:(?:still|also|just|really|definitely|probably)\s+)?"
+    r"(?P<modal>will|'ll|am going to|'m going to|can|need to|have to|must|should)\s+(?P<task>.+)$", re.I)
 LETS_RE = re.compile(r"\b(?:let's|let us)\s+(.+)$", re.I)
+# Whisper often drops the 's: "let schedule another meeting"
+LET_PLAN_RE = re.compile(r"\blet\s+((?:schedule|arrange|plan|set up|book|review|discuss|meet)\b.+)$", re.I)
 ASSIGN_RE = re.compile(
     r"\b([A-Za-z]+),?\s+(?:please|(?:can|could|would|will) you(?: also)?)\s+(.+)$", re.I)
 SKIP_TASK_RE = re.compile(r"^(?:start|begin|get started|move on|continue|go through)\b", re.I)
+# "I can see / hear / understand ..." is not a promise
+NOT_A_PROMISE = {"see", "hear", "understand", "imagine", "believe", "think", "tell", "say", "assure"}
+EMPTY_ENDING = {"it", "this", "that", "them", "there", "so", "too"}   # "review it" says nothing
+
+
+def _too_short(task):
+    words = task.split()
+    return len(words) <= 2 and words[-1].lower().strip(".,!?") in EMPTY_ENDING
 
 
 def _sentences(text):
@@ -137,55 +147,170 @@ def _dates(sentence):
     return [d.group(0) for d in DATE_RE.finditer(sentence)]
 
 
+def _join_cut_segments(segs):
+    """A sentence that was cut at the end of one segment ("... the remaining tasks are...") goes on
+    in the next segment of the same speaker: join them, so that the rules see the whole sentence."""
+    out = []
+    for seg in segs:
+        prev = out[-1] if out else None
+        if prev and prev["speaker"] == seg["speaker"] and prev["text"].rstrip().endswith(("...", "\u2026")):
+            head = prev["text"].rstrip().rstrip(".\u2026").rstrip()
+            tail = seg["text"].strip()
+            first = tail.split()[0] if tail else ""
+            if first and first[0].isupper() and not first.isupper() and not first.startswith("I'"):
+                tail = tail[0].lower() + tail[1:]
+            prev["text"] = head + " " + tail
+            prev["end"] = seg.get("end", prev.get("end"))
+        else:
+            out.append(dict(seg))
+    return out
+
+
+# where a new statement starts inside a sentence: ", but please ...", " and I ...", "; ..."
+NEW_STATEMENT_RE = re.compile(
+    r",\s*(?:but|and)\s+(?=(?:please|I|we|you|they|he|she|it|the|this|that|there)\b)"
+    r"|\s+(?:and|but)\s+(?=(?:I|we|you|please)\b)"
+    r"|;\s*", re.I)
+# where the text of a task ends: at a new statement, or at a reason ("so that we ...", "because ...")
+TASK_END_RE = re.compile(
+    NEW_STATEMENT_RE.pattern + r"|,?\s+so\s+(?=(?:that|I|we|you)\b)|,\s*(?:because|which)\b", re.I)
+
+
+def _trim_task(task):
+    """'arrange a call tomorrow, but please make sure ...' -> 'arrange a call tomorrow'"""
+    first = TASK_END_RE.split(task.strip())[0].strip(" ,;")
+    first = re.sub(r"\b(?:try|trying|do|doing)\s+(?:my|our)\s+best\s+to\s+", "", first, flags=re.I)
+    return first if len(first.split()) >= 3 else task.strip()
+
+
+# "Please send the file", "Could you share the logs?"  (a request, without anybody's name)
+REQUEST_RE = re.compile(r"\b(?:(?:could|can|would|will) you(?: also)?(?: please)?|please)\s+(.+)$", re.I)
+# requests that only ask for talk or give permission are not tasks
+NOT_A_TASK_RE = re.compile(
+    r"^(?:explain|tell|say|describe|clarify|repeat|mention|let me|go ahead|feel free|proceed|continue|"
+    r"start|begin|move on|get started|go through|take your time|hold on|wait)\b", re.I)
+
+
+def _name_owners(names):
+    """first or last name -> the one speaker who has it (a name that two speakers share is left out)"""
+    owners = defaultdict(set)
+    for n in names:
+        for w in re.findall(r"[A-Za-z]{3,}", display_name(n)):
+            owners[w.lower()].add(n)
+    return {w: next(iter(s)) for w, s in owners.items() if len(s) == 1}
+
+
 def extract_actions(segs):
-    """Find who has to do what, and by when."""
+    """Find who has to do what, and by when. Every statement of a sentence is looked at on its own."""
+    segs = _join_cut_segments(segs)
     names = {s["speaker"] for s in segs}
+    owner_of_name = _name_owners(names)
     items, last_assign = [], None
 
     for i, seg in enumerate(segs):
+        others = [n for n in names if n != seg["speaker"]]
         for sent in _sentences(seg["text"]):
-            clean = sent.rstrip(".!?").strip()
-            due = " ".join(_dates(sent))
-
-            def new_item(owner, task):
-                return {"owner": owner, "task": task.strip(), "due": due,
-                        "said_by": seg["speaker"], "at": seg["start"], "source": sent}
-
-            # "Anil, please send ..." / "Anil, can you ...?"
-            m = ASSIGN_RE.search(clean)
-            if m and m.group(1) in names and m.group(1) != seg["speaker"]:
-                item = new_item(m.group(1), m.group(2))
-                items.append(item)
-                last_assign = (i, item)
-                continue
-
-            # "I will ..." / "I can ..." / "We need to ..."
-            m = SELF_RE.search(clean)
-            if m:
-                accepted = (last_assign and i - last_assign[0] <= 1
-                            and last_assign[1]["owner"] == seg["speaker"]
-                            and ACCEPT_RE.match(clean))
-                if accepted:                       # "Sure, I will do it": task already listed
-                    if not last_assign[1]["due"] and due:
-                        last_assign[1]["due"] = due
+            for clause in NEW_STATEMENT_RE.split(sent):
+                clause = clause.strip()
+                if not clause:
                     continue
-                owner = seg["speaker"] if m.group(1).lower() == "i" else "Team"
-                items.append(new_item(owner, m.group(2)))
-                continue
+                clean = clause.rstrip(".!?").strip()
+                due = " ".join(_dates(clause))
 
-            # "Let's ..."
-            m = LETS_RE.search(clean)
-            if m and not SKIP_TASK_RE.match(m.group(1)):
-                items.append(new_item("Team", m.group(1)))
-    return items
+                def new_item(owner, task):
+                    return {"owner": owner, "task": _trim_task(task), "due": due,
+                            "said_by": seg["speaker"], "at": seg["start"], "source": sent}
+
+                # "Priya, please send ..." / "Anil, can you ...?"  (a first or last name of another speaker)
+                m = ASSIGN_RE.search(clean)
+                who = owner_of_name.get(m.group(1).lower()) if m else None
+                if m and who and who != seg["speaker"] and not NOT_A_TASK_RE.match(m.group(2)):
+                    item = new_item(who, m.group(2))
+                    items.append(item)
+                    last_assign = (i, item)
+                    continue
+
+                # "Please make sure ..." / "Could you share ...?"  (a request to the other person)
+                m = REQUEST_RE.search(clean)
+                if m and len(m.group(1).split()) >= 3 and not NOT_A_TASK_RE.match(m.group(1)):
+                    owner = others[0] if len(others) == 1 else "Unassigned"
+                    item = new_item(owner, m.group(1))
+                    items.append(item)
+                    last_assign = (i, item)
+                    continue
+
+                # "I will ..." / "I can ..." / "We need to ..."
+                m = SELF_RE.search(clean)
+                if m:
+                    task = m.group("task")
+                    first_word = task.split()[0].lower() if task.split() else ""
+                    if m.group("modal").lower() == "can" and first_word in NOT_A_PROMISE:
+                        continue                   # "I can see that ..." says nothing about work to do
+                    if _too_short(task):
+                        continue
+                    # "Sure, I will send it": a short answer that accepts the request just made
+                    accepted = (last_assign and i - last_assign[0] <= 1
+                                and last_assign[1]["owner"] == seg["speaker"]
+                                and ACCEPT_RE.match(clean) and len(task.split()) <= 6)
+                    if accepted:
+                        if not last_assign[1]["due"] and due:
+                            last_assign[1]["due"] = due
+                        continue
+                    owner = seg["speaker"] if m.group("who").lower() == "i" else "Team"
+                    items.append(new_item(owner, task))
+                    continue
+
+                # "Let's ..." / "let schedule ..."
+                m = LETS_RE.search(clean) or LET_PLAN_RE.search(clean)
+                if m and not SKIP_TASK_RE.match(m.group(1)) and not _too_short(m.group(1)):
+                    items.append(new_item("Team", m.group(1)))
+    return _remove_duplicates(items)
+
+
+def _remove_duplicates(items):
+    """The same task said twice (same owner, nearly the same words) is listed once."""
+    out = []
+    for it in items:
+        words = set(re.findall(r"[a-z]+", it["task"].lower()))
+        same = None
+        for o in out:
+            ow = set(re.findall(r"[a-z]+", o["task"].lower()))
+            if o["owner"] == it["owner"] and words and ow and len(words & ow) / len(words | ow) >= 0.8:
+                same = o
+                break
+        if same is None:
+            out.append(it)
+        elif not same["due"] and it["due"]:
+            same["due"] = it["due"]
+    return out
+
+
+# a date counts as a "key date" when something is planned or due, or when it is an exact date
+CUE_RE = re.compile(
+    r"\b(?:before|by|until|till|due(?! to)|deadline|submit|submission|deliver|meeting|schedule|"
+    r"arrange|call|release|launch|rehearsal|demo|presentation|exam|appointment)\b", re.I)
+WEAK_DATE_RE = re.compile(r"^(?:today|tonight|this\s+(?:week|month|year|weekend))$", re.I)   # need a cue
+PAST_DATE_RE = re.compile(r"^(?:yesterday|last\s+.+)$", re.I)                               # never
+
+
+def _useful_dates(sentence):
+    has_cue = bool(CUE_RE.search(sentence))
+    out = []
+    for d in _dates(sentence):
+        if PAST_DATE_RE.match(d):
+            continue
+        if WEAK_DATE_RE.match(d) and not has_cue:
+            continue
+        out.append(d)
+    return out
 
 
 def extract_key_dates(segs):
     """Every sentence that mentions a date or time, and who said it."""
     out = []
-    for seg in segs:
+    for seg in _join_cut_segments(segs):
         for sent in _sentences(seg["text"]):
-            dates = [d for d in _dates(sent) if d.lower() != "yesterday"]
+            dates = _useful_dates(sent)
             if dates:
                 out.append({"dates": dates, "text": sent,
                             "said_by": seg["speaker"], "at": seg["start"]})
@@ -193,6 +318,15 @@ def extract_key_dates(segs):
 
 
 # ---------- summary: small pieces first, then summaries of summaries ----------
+def trim_to_sentence(text):
+    """If the model ran out of room, its last sentence may be cut in the middle: drop it."""
+    text = text.strip()
+    if not text or text[-1] in ".!?":
+        return text
+    cut = max(text.rfind("."), text.rfind("!"), text.rfind("?"))
+    return text[:cut + 1] if cut > 0 else text
+
+
 def summarize(text, max_len=80, min_len=15):
     m = _load()
     tok, model = m["sum_tok"], m["sum"]
@@ -200,7 +334,10 @@ def summarize(text, max_len=80, min_len=15):
     with torch.no_grad():
         ids = model.generate(**inputs, max_length=max_len, min_length=min_len,
                              num_beams=4, no_repeat_ngram_size=3, do_sample=False)
-    return tok.decode(ids[0], skip_special_tokens=True)
+    out = tok.decode(ids[0], skip_special_tokens=True)
+    if len(ids[0]) >= max_len:                  # it used all the room: the end may be cut off
+        out = trim_to_sentence(out)
+    return out
 
 
 def chunk_lines(lines, budget):
@@ -219,13 +356,34 @@ def chunk_lines(lines, budget):
     return chunks
 
 
+ALIASES = ["Alex", "Sam", "Jordan", "Taylor", "Morgan", "Riley", "Casey", "Jamie", "Robin", "Drew"]
+
+
+def display_name(name):
+    """'124CS0029 PARCHURI POOJITH KUMAR' -> 'Parchuri Poojith Kumar' (no ID code, no shouting)."""
+    parts = [w for w in name.split() if not any(ch.isdigit() for ch in w)]
+    text = " ".join(parts) or name
+    return text.title() if (text.isupper() or text.islower()) else text
+
+
 def summarize_meeting(segs, max_words=MAX_SUMMARY_WORDS, plain=False):
     """Summarize small pieces, then summarize the summaries until the text is short.
-    plain=True (lecture mode): the text has no speaker names."""
+    plain=True (lecture mode): the text has no speaker names.
+    The summarizer gets short first names instead of long account names, which it garbles;
+    the real names are put back afterwards."""
+    name_of = {}
     if plain:
         lines = [s["text"] for s in segs]
     else:
-        lines = [f'{s["speaker"]}: {s["text"]}' for s in segs]
+        used = " ".join(s["text"] for s in segs).lower()
+        free = [a for a in ALIASES if a.lower() not in used]
+        alias_of = {}
+        for sp in dict.fromkeys(s["speaker"] for s in segs):
+            if free:
+                a = free.pop(0)
+                alias_of[sp] = a
+                name_of[a] = display_name(sp)
+        lines = [f'{alias_of.get(s["speaker"], s["speaker"])}: {s["text"]}' for s in segs]
     chunks = chunk_lines(lines, CHUNK_TOKENS)
     print(f"  level 0: {len(chunks)} pieces", flush=True)
     parts = [summarize(c, max_len=70, min_len=15) for c in chunks]
@@ -238,7 +396,10 @@ def summarize_meeting(segs, max_words=MAX_SUMMARY_WORDS, plain=False):
             break
         print(f"  level {level}: {len(groups)} groups", flush=True)
         parts = [summarize(g, max_len=90, min_len=30) for g in groups]
-    return " ".join(parts)
+    text = " ".join(parts)
+    for alias, real in name_of.items():             # put the real names back
+        text = re.sub(rf"\b{alias}\b", real, text)
+    return text
 
 
 def lecture_notes(segs):
@@ -353,24 +514,11 @@ def neutral(text):
     return text
 
 
-def _lecture_model():
-    """The summarizer for lectures. If it cannot be loaded, the meeting summarizer is used."""
-    if "lec_sum" not in _models:
-        try:
-            print(f"Loading the lecture summarizer {LECTURE_SUM_NAME} (first run downloads it)...")
-            _models["lec_tok"] = AutoTokenizer.from_pretrained(LECTURE_SUM_NAME)
-            _models["lec_sum"] = AutoModelForSeq2SeqLM.from_pretrained(LECTURE_SUM_NAME).eval()
-        except Exception as e:
-            print("Could not load it, using the meeting summarizer instead:", e)
-            m = _load()
-            _models["lec_tok"], _models["lec_sum"] = m["sum_tok"], m["sum"]
-    return _models["lec_tok"], _models["lec_sum"]
-
-
 def lecture_summarize(text):
-    """Rewrite the key sentences of one topic into a shorter text.
-    Uses the summarizer that is already loaded (no extra memory)."""
+    """Shorten a text for lecture notes. It uses the summarizer that is already loaded
+    for meetings, so no extra model is loaded (that used too much memory)."""
     return summarize(text, max_len=90, min_len=25)
+
 
 def build_report(segs, mode="meeting"):
     """mode "meeting": summary, action items, key dates, who said what.
@@ -381,6 +529,7 @@ def build_report(segs, mode="meeting"):
         res = lecture_mod.build_lecture(segs, lecture_summarize)
         return {
             "mode": "lecture",
+            "rules": RULES_VERSION,
             "summary": res["summary"],
             "summary_items": res["summary_items"],
             "notes": res["notes"],
@@ -412,6 +561,7 @@ def build_report(segs, mode="meeting"):
 
     return {
         "mode": "meeting",
+        "rules": RULES_VERSION,
         "summary": summary,
         "notes": [],
         "action_items": extract_actions(segs),

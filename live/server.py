@@ -4,6 +4,7 @@ import json
 import re
 import sqlite3
 import threading
+import time
 import wave
 from collections import defaultdict, deque
 from datetime import datetime
@@ -43,6 +44,9 @@ CUT_AT_SPEAKER_CHANGE = True  # end the sentence soon after the speaker changes
 SAVE_DEBUG_WAV = False        # set True to save each sentence in data/
 SPEAKER_LEAD = 0.2            # seconds: the speaking indicator reacts a little after the voice starts
 SPEAKER_WAIT = 3.0            # seconds to wait after a sentence began for Meet to say who started it
+USE_NAME_HINTS = False        # True: tell Whisper the participants' names (it may then write the names on quiet audio)
+BEAM_SIZE = 1                 # 1 = faster live subtitles, 5 = a little more accurate (Whisper's default)
+COLLAPSE_REPEATS = True       # "Good morning, good morning!" -> "Good morning!"  (False: keep every repeat)
 
 # Words Whisper often gets wrong (names, college, tools). Add your own here.
 # They are given to Whisper as a hint, together with the names of the Meet participants.
@@ -102,12 +106,43 @@ def normalize(audio):
 
 
 def make_prompt(names):
-    """Hint text for Whisper: the fixed terms plus the names of the people in the meeting."""
+    """Hint text for Whisper, or None. The participants' names are only used if USE_NAME_HINTS is
+    True: on quiet or noisy audio Whisper then tends to write the names instead of the speech."""
     terms = []
-    for t in list(names) + HINT_TERMS:
+    for t in (list(names) if USE_NAME_HINTS else []) + HINT_TERMS:
         if t and t not in terms:
             terms.append(t)
-    return "Vocabulary: " + ", ".join(terms) + "."
+    return ("Vocabulary: " + ", ".join(terms) + ".") if terms else None
+
+
+# things Whisper writes when there is only silence or noise
+HALLUCINATIONS = (
+    "thank you for watching", "thanks for watching", "we'll see you in the next one",
+    "see you in the next video", "please subscribe", "subtitles by the amara.org community",
+)
+
+
+def is_hallucination(text):
+    """True for a repeated word ("Kumar! Kumar! Kumar!") or a typical silence phrase."""
+    t = " ".join(re.sub(r"[^a-z0-9' ]", " ", text.lower()).split())
+    if not t:
+        return True
+    words = t.split()
+    if len(words) >= 3 and len(set(words)) == 1:
+        return True
+    return any(t == h or (t.startswith(h) and len(t) <= len(h) + 5) for h in HALLUCINATIONS)
+
+
+_REPEAT_RE = re.compile(r"\b((?:[\w']+\s+){0,3}[\w']+)([,.!?]*\s+)\1\b([,.!?]*)", re.I)
+
+
+def collapse_repeats(text):
+    """Whisper often says a phrase twice: 'Good morning, good morning!' -> 'Good morning!'"""
+    prev = None
+    while prev != text:
+        prev = text
+        text = _REPEAT_RE.sub(lambda m: m.group(1) + m.group(3), text)
+    return text
 
 
 def run_whisper(audio, vad, prompt):
@@ -116,8 +151,16 @@ def run_whisper(audio, vad, prompt):
         vad_filter=vad,
         condition_on_previous_text=False,
         initial_prompt=prompt,
+        beam_size=BEAM_SIZE,
     )
-    return " ".join(s.text.strip() for s in segments).strip()
+    kept = []
+    for seg in segments:
+        no_speech = getattr(seg, "no_speech_prob", 0.0)
+        logprob = getattr(seg, "avg_logprob", 0.0)
+        if no_speech > 0.6 and logprob < -1.0:
+            continue                        # Whisper itself says that this was not speech
+        kept.append(seg.text.strip())
+    return " ".join(kept).strip()
 
 
 def transcribe(audio, names=()):
@@ -126,7 +169,9 @@ def transcribe(audio, names=()):
     text = run_whisper(audio, True, prompt)
     if not has_words(text):
         text = run_whisper(audio, False, prompt)
-    return text if has_words(text) else ""
+    if not has_words(text) or is_hallucination(text):
+        return ""
+    return collapse_repeats(text) if COLLAPSE_REPEATS else text
 
 
 def threshold(hist):
@@ -301,11 +346,36 @@ async def ws(websocket: WebSocket):
                 return name
         return pick_speaker(speaker_events, a, b, fallback)
 
+    emit_tasks = []                         # sentences that are waiting to be shown, in order
+
+    async def emit(prev, speaker, start, end, text):
+        """Show one sentence. It waits for the one before it, so the order never changes."""
+        if prev is not None:
+            await asyncio.wait([prev])
+        try:
+            # with more than one person, wait until Meet has had time to say who started
+            if len(hint_names) >= 2 or speaker == "Unknown":
+                while not stopped and stream_now() < start + SPEAKER_WAIT:
+                    await asyncio.sleep(0.1)
+                speaker = speaker_for(start, end, speaker)
+            start, end = round(start, 2), round(end, 2)
+            row_id = save_segment(meeting_id, speaker, start, end, text)
+            print(f"[{meeting_id}] {speaker}: {text}")
+            await websocket.send_json({
+                "type": "subtitle", "id": row_id, "speaker": speaker,
+                "text": text, "start": start, "end": end,
+            })
+        except (WebSocketDisconnect, RuntimeError):
+            return                          # the browser disconnected
+        except Exception as e:
+            print("Could not show a subtitle:", repr(e))
+
     async def worker():
         n = 0
         while True:
             job = await jobs.get()
             if job is None:                 # no more sentences are coming
+                await asyncio.gather(*emit_tasks, return_exceptions=True)
                 try:
                     await websocket.send_json({"type": "done"})
                 except Exception:
@@ -317,20 +387,14 @@ async def ws(websocket: WebSocket):
                 if SAVE_DEBUG_WAV:
                     save_wav(DATA_DIR / f"debug_utt{n}.wav", audio)
                 await websocket.send_json({"type": "status", "text": "transcribing..."})
+                t0 = time.time()
                 text = await asyncio.to_thread(transcribe, audio, list(hint_names))
+                took = time.time() - t0
+                print(f"  sentence {n}: {end - start:.1f} s of audio transcribed in {took:.1f} s "
+                      f"({jobs.qsize()} waiting)" + ("" if text else "  -> nothing kept (no speech)"))
                 if text:
-                    # with more than one person, wait until Meet has had time to say who started
-                    if len(hint_names) >= 2 or speaker == "Unknown":
-                        while not stopped and stream_now() < start + SPEAKER_WAIT:
-                            await asyncio.sleep(0.1)
-                        speaker = speaker_for(start, end, speaker)
-                    start, end = round(start, 2), round(end, 2)
-                    row_id = save_segment(meeting_id, speaker, start, end, text)
-                    print(f"[{meeting_id}] {speaker}: {text}")
-                    await websocket.send_json({
-                        "type": "subtitle", "id": row_id, "speaker": speaker,
-                        "text": text, "start": start, "end": end,
-                    })
+                    prev = emit_tasks[-1] if emit_tasks else None
+                    emit_tasks.append(asyncio.create_task(emit(prev, speaker, start, end, text)))
                 state = "transcribing..." if not jobs.empty() else "listening..."
                 await websocket.send_json({"type": "status", "text": state})
             except (WebSocketDisconnect, RuntimeError):
@@ -419,3 +483,5 @@ async def ws(websocket: WebSocket):
         pass
     finally:
         worker_task.cancel()
+        for task in emit_tasks:
+            task.cancel()
