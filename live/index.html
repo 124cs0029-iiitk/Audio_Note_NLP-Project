@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Audio Note</title>
+  <style>
+    :root {
+      --bg: #e0f2fe;
+      --bg-top: #bae6fd;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --line: #cbd5e1;
+      --accent: #0284c7;
+      --accent-dark: #0369a1;
+      --accent-soft: #e0f2fe;
+      --green: #16a34a;
+      --red: #dc2626;
+      --amber: #d97706;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 320px, #f0f9ff 100%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+/* left background Audio Note symbol */
+    .bg-audio-symbol {
+      position: fixed;
+      left: 1cm;
+      top: calc(62px + 1cm);
+      bottom: 1cm;
+      width: min(290px, calc((100vw - 1000px) / 2 - 2cm));
+      height: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #0c4a6e;
+      opacity: 0.26;
+      pointer-events: none;
+      user-select: none;
+      z-index: 0;
+    }
+
+    .bg-audio-symbol svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* top bar */
+    .topbar {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 24px;
+      height: 62px;
+    }
+
+    .brand {
+      font-weight: 700;
+      font-size: 19px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      letter-spacing: -0.01em;
+    }
+
+    .brand span.dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+      display: inline-block;
+    }
+
+    .user-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .user-pill {
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 13px;
+    }
+
+    main {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* login page */
+    .login-wrap {
+      max-width: 430px;
+      margin: 36px auto 0;
+    }
+
+    .login-card {
+      background: var(--card);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 20px;
+      padding: 30px 28px;
+      box-shadow: 0 14px 34px rgba(2, 132, 199, 0.12);
+    }
+
+    .login-card h1 {
+      margin: 8px 0 6px;
+      font-size: 26px;
+      letter-spacing: -0.02em;
+    }
+
+    .login-card p.sub {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.5;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .field input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .field input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.16);
+    }
+
+    .login-error {
+      color: var(--red);
+      font-size: 13.5px;
+      margin: 6px 0 12px;
+      min-height: 1.2em;
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 11px 18px;
+      font-size: 15.5px;
+    }
+
+    .login-toggle {
+      margin-top: 16px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .login-toggle button {
+      background: none;
+      border: 0;
+      color: var(--accent);
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      text-decoration: underline;
+    }
+
+    /* home */
+    .hero {
+      background: var(--card);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 18px;
+      padding: 28px 30px;
+      box-shadow: 0 8px 24px rgba(2, 132, 199, 0.08);
+    }
+
+    .hero-badge {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 11px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+
+    .hero h1 {
+      margin: 4px 0 8px;
+      font-size: 32px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+      max-width: 660px;
+      line-height: 1.55;
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .mode-card {
+      background: var(--card);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.06);
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .mode-card:hover {
+      transform: translateY(-2px);
+      border-color: #7dd3fc;
+      box-shadow: 0 10px 24px rgba(2, 132, 199, 0.14);
+    }
+
+    .mode-card .m-icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .mode-card h3 {
+      margin: 2px 0 4px;
+      font-size: 18px;
+      color: var(--text);
+    }
+
+    .mode-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.45;
+    }
+
+    .mode-card .m-link {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+      margin-top: 4px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 16px;
+      padding: 22px;
+      margin-top: 20px;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.06);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    table.recent-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 15px;
+    }
+
+    .recent-table th {
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 13px;
+      padding: 8px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .recent-table td {
+      padding: 11px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: middle;
+    }
+
+    .recent-table tbody tr {
+      cursor: pointer;
+      transition: background 0.12s ease;
+    }
+
+    .recent-table tbody tr:hover {
+      background: #f0f9ff;
+    }
+
+    .recent-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .recent-table .id {
+      color: var(--muted);
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    /* buttons and fields */
+    button, select, input {
+      font: inherit;
+    }
+
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: 0;
+      border-radius: 10px;
+      padding: 9px 18px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--accent-dark);
+    }
+
+    .btn:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+
+    .btn.danger {
+      background: var(--red);
+    }
+
+    .btn.danger:hover:not(:disabled) {
+      background: #b91c1c;
+    }
+
+    .btn.secondary {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .btn.secondary:hover:not(:disabled) {
+      background: #f0f9ff;
+    }
+
+    .btn.secondary:disabled {
+      background: #f1f5f9;
+      color: #94a3b8;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .btn.small {
+      padding: 6px 12px;
+      font-size: 14px;
+    }
+
+    a.btn {
+      display: inline-block;
+    }
+
+    input[type=text], input[type=email], input[type=password], select {
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      padding: 8px 11px;
+      background: #fff;
+    }
+
+    .row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 10px 0;
+    }
+
+    /* session page */
+    .page-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 4px 0 6px;
+    }
+
+    .page-title h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: -0.015em;
+    }
+
+    .page-title .icon {
+      font-size: 30px;
+    }
+
+    .lead {
+      color: var(--muted);
+      margin: 0 0 18px;
+      line-height: 1.5;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      background: #f1f5f9;
+      color: var(--muted);
+    }
+
+    .chip.ok {
+      background: #e7f7ec;
+      color: var(--green);
+    }
+
+    .chip.live {
+      background: #fdecec;
+      color: var(--red);
+    }
+
+    .chip .d {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    #status {
+      color: var(--muted);
+      min-height: 1.3em;
+    }
+
+    #subs {
+      margin-top: 6px;
+    }
+
+    #subs p {
+      font-size: 20px;
+      margin: 10px 0;
+      line-height: 1.4;
+    }
+
+    #subs small {
+      color: var(--muted);
+      font-size: 13px;
+      margin-right: 10px;
+    }
+
+    #subs b {
+      margin-right: 6px;
+    }
+
+    .sub-empty {
+      color: var(--muted);
+    }
+
+    /* review and report */
+    .rrow {
+      margin: 6px 0;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .rrow small {
+      color: var(--muted);
+      width: 40px;
+    }
+
+    .rrow input {
+      flex: 1;
+      padding: 6px 8px;
+    }
+
+    #report h3 {
+      margin-top: 0;
+    }
+
+    #report h4 {
+      margin: 18px 0 6px;
+      font-size: 16px;
+    }
+
+    #report .stats {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 2px 0;
+    }
+
+    #report ul {
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    #report .summary {
+      font-size: 17px;
+      line-height: 1.55;
+      background: var(--accent-soft);
+      padding: 14px;
+      border-radius: 12px;
+    }
+
+    #report .weak {
+      border-bottom: 2px dotted var(--amber);
+    }
+
+    #report .src {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .chip.warn {
+      background: #fff4e0;
+      color: var(--amber);
+    }
+
+    #report table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 15px;
+    }
+
+    #report th, #report td {
+      border: 1px solid var(--line);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    #report th {
+      background: #f0f9ff;
+    }
+
+    #report .summary p {
+      margin: 0 0 8px;
+    }
+
+    #report .summary p:last-child {
+      margin-bottom: 0;
+    }
+
+    .actions-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 1260px) {
+      .bg-audio-symbol {
+        display: none;
+      }
+    }
+
+    @media print {
+      .topbar, .bg-audio-symbol, #controls, #meetbox, #meetHistoryBox, #subsPanel, #subs, #review, .actions-row, #status, #meetingId, #historyNav {
+        display: none !important;
+      }
+      body {
+        background: #fff;
+      }
+      .panel {
+        border: 0;
+        padding: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+<!-- Decorative left-side Audio Note symbol -->
+  <div class="bg-audio-symbol" aria-hidden="true">
+<svg viewBox="10 10 124 224" preserveAspectRatio="xMidYMid meet" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Tall microphone capsule -->
+      <rect x="30" y="14" width="46" height="88" rx="23" stroke="currentColor" stroke-width="8"/>
+      <line x1="43" y1="40" x2="63" y2="40" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+      <line x1="43" y1="58" x2="63" y2="58" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+      <line x1="43" y1="76" x2="63" y2="76" stroke="currentColor" stroke-width="5.5" stroke-linecap="round"/>
+
+      <!-- Mic cradle & stand -->
+      <path d="M15 76C15 97.5391 32.0132 115 53 115C73.9868 115 91 97.5391 91 76" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+      <path d="M53 115V152M31 152H75" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+
+      <!-- Sound waves -->
+      <path d="M93 42C103.5 52.5 103.5 69.5 93 80" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+      <path d="M107 28C123.5 44.5 123.5 77.5 107 94" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+
+      <!-- Note sheet below -->
+      <rect x="16" y="166" width="110" height="64" rx="13" stroke="currentColor" stroke-width="7.5"/>
+      <path d="M32 187H110M32 202H100M32 217H84" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="#home" data-nav="home"><span class="dot"></span>Audio Note</a>
+    <div class="user-bar" id="userBar" hidden>
+      <span class="user-pill" id="userGreeting"></span>
+      <button type="button" class="btn secondary small" id="logoutBtn">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ===================== LOGIN ===================== -->
+    <section id="view-login" hidden>
+      <div class="login-wrap">
+        <div class="login-card">
+          <span class="hero-badge">Local &amp; Private</span>
+          <h1 id="authHeading">Sign in to Audio Note</h1>
+          <p class="sub" id="authSub">Sign in to access your private lecture notes, Google Meet transcripts, and saved reports.</p>
+
+          <form id="authForm" novalidate>
+            <div class="field" id="nameField" hidden>
+              <label for="authName">Full name</label>
+              <input type="text" id="authName" placeholder="Enter your name" autocomplete="name">
+            </div>
+
+            <div class="field">
+              <label for="authEmail">Email address</label>
+              <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email" required>
+            </div>
+
+            <div class="field">
+              <label for="authPassword">Password</label>
+              <input type="password" id="authPassword" placeholder="Enter password" autocomplete="current-password" required>
+            </div>
+
+            <div class="login-error" id="authError"></div>
+            <button type="submit" class="btn login-btn" id="authSubmitBtn">Sign in</button>
+          </form>
+
+          <div class="login-toggle">
+            <span id="authToggleText">Don't have an account?</span>
+            <button type="button" id="authToggleBtn">Create account</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== HOME ===================== -->
+    <section id="view-home" hidden>
+      <div class="hero">
+        <span class="hero-badge">Local &amp; Private</span>
+        <h1>Audio Note</h1>
+        <p>Capture live subtitles from lectures or Google Meet calls, review transcripts, and generate structured notes and reports locally on your computer.</p>
+      </div>
+
+      <div class="mode-grid">
+        <a class="mode-card" href="#lecture" data-nav="lecture">
+          <div>
+            <div class="m-icon">&#127891;</div>
+            <h3>Lecture / video</h3>
+            <p>Record audio from a shared browser tab to generate study notes, summaries, and key terms.</p>
+          </div>
+          <span class="m-link">Open Lecture / video &rarr;</span>
+        </a>
+
+        <a class="mode-card" href="#meeting" data-nav="meeting">
+          <div>
+            <div class="m-icon">&#128101;</div>
+            <h3>Google Meet</h3>
+            <p>Capture live captions and mic audio from Google Meet with speaker labels and meeting notes.</p>
+          </div>
+          <span class="m-link">Open Google Meet &rarr;</span>
+        </a>
+
+        <a class="mode-card" href="#history" data-nav="history">
+          <div>
+            <div class="m-icon">&#128336;</div>
+            <h3>History</h3>
+            <p>View your saved session reports anytime and export them as PDF or DOC files.</p>
+          </div>
+          <span class="m-link">Open History &rarr;</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- ===================== HISTORY ===================== -->
+    <section id="view-history" hidden>
+      <div class="page-title">
+        <span class="icon">&#128336;</span>
+        <h1>History</h1>
+      </div>
+      <p class="lead">Click one of your saved sessions to open its report immediately without regenerating.</p>
+      <div class="panel">
+        <div id="recentBox"></div>
+      </div>
+    </section>
+
+    <!-- ===================== SESSION (lecture / meeting / saved report) ===================== -->
+    <section id="view-session" hidden>
+      <div id="historyNav" style="margin-bottom:12px" hidden>
+        <button type="button" class="btn secondary small" id="backToHistoryBtn">&larr; Back to History</button>
+      </div>
+
+      <div class="page-title">
+        <span class="icon" id="sIcon"></span>
+        <h1 id="sTitle"></h1>
+      </div>
+      <p class="lead" id="sLead"></p>
+
+      <div class="panel" id="controls">
+        <div class="row" style="margin-top:0">
+          <button class="btn" id="startBtn">Start recording</button>
+          <button class="btn danger" id="stopBtn" disabled>Stop</button>
+          <button class="btn secondary" id="reviewBtn" disabled>Review &amp; generate report</button>
+          <span class="chip" id="liveChip" hidden><span class="d"></span>Listening</span>
+        </div>
+        <div id="status"></div>
+        <div id="meetingId" style="color:var(--muted);font-size:13px"></div>
+      </div>
+
+      <div class="panel" id="meetbox" hidden>
+        <div class="row" style="margin-top:0">
+          <span class="chip" id="bridgeChip"><span class="d"></span><span id="bridgeText">Google Meet extension: waiting</span></span>
+        </div>
+        <div class="row">
+          <label>Participants (filled in from Google Meet, or type them):
+            <input type="text" id="names" size="40" placeholder="appears when the Meet extension is connected">
+          </label>
+        </div>
+        <div class="row">Current speaker: <b id="speakerNow">-</b></div>
+      </div>
+
+      <div class="panel" id="subsPanel">
+        <h2>Live subtitles</h2>
+        <div id="subs"><span class="sub-empty">Subtitles appear here when a session runs.</span></div>
+      </div>
+
+      <div class="panel" id="review" hidden>
+        <h2>Review the transcript</h2>
+        <p class="lead">Fix any misheard words or wrong speakers, add a file name, then generate the report.</p>
+        <div id="reviewList"></div>
+        <div class="row" style="margin-top:14px">
+          <label>File name:
+            <input type="text" id="fileNameInput" size="34" placeholder="Enter file name (e.g. OS_Lecture_1)">
+          </label>
+          <button class="btn" id="genBtn">Generate report</button>
+          <span id="genStatus" style="color:var(--muted)"></span>
+        </div>
+      </div>
+
+      <div class="panel" id="report" hidden></div>
+
+      <div class="panel" id="meetHistoryBox" hidden>
+        <h2>History</h2>
+        <div id="meetHistoryList"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const startBtn = $("startBtn"), stopBtn = $("stopBtn");
+    const controlsEl = $("controls"), subsPanel = $("subsPanel"), historyNav = $("historyNav");
+    const backToHistoryBtn = $("backToHistoryBtn");
+    const statusEl = $("status"), subs = $("subs"), meetingIdEl = $("meetingId");
+    const namesInput = $("names"), speakerNowEl = $("speakerNow");
+    const reviewBtn = $("reviewBtn");
+    const reviewEl = $("review"), reviewList = $("reviewList");
+    const fileNameInput = $("fileNameInput"), genBtn = $("genBtn"), genStatus = $("genStatus");
+    const reportEl = $("report"), meetBox = $("meetbox"), liveChip = $("liveChip");
+    const bridgeChip = $("bridgeChip"), bridgeText = $("bridgeText");
+    const meetHistoryBox = $("meetHistoryBox"), meetHistoryList = $("meetHistoryList");
+
+    // Auth elements
+    const userBar = $("userBar"), userGreeting = $("userGreeting"), logoutBtn = $("logoutBtn");
+    const authForm = $("authForm"), authHeading = $("authHeading"), authSub = $("authSub");
+    const nameField = $("nameField"), authName = $("authName");
+    const authEmail = $("authEmail"), authPassword = $("authPassword");
+    const authError = $("authError"), authSubmitBtn = $("authSubmitBtn");
+    const authToggleText = $("authToggleText"), authToggleBtn = $("authToggleBtn");
+
+    let isRegisterMode = false;
+    let ws, audioCtx, stream, micStream;
+    let running = false, view = "login";
+    let speakers = [], current = "";
+    let segs = [], meetingId = "", pendingOpen = null;
+    let currentReportData = null;
+
+    const COLORS = ["#0284c7", "#dc2626", "#16a34a", "#d97706", "#9333ea", "#0891b2"];
+    const MODES = {
+      lecture: {
+        icon: "\u{1F393}",
+        title: "Lecture and video notes",
+        lead: "Share a Chrome tab playing a class or video to capture subtitles and build study notes."
+      },
+      meeting: {
+        icon: "\u{1F465}",
+        title: "Google Meet meetings",
+        lead: "Capture live subtitles with speaker names from Google Meet along with your microphone."
+      }
+    };
+
+    function fmt(t) {
+      const m = Math.floor(t / 60), s = Math.floor(t % 60);
+      return m + ":" + String(s).padStart(2, "0");
+    }
+
+    function el(tag, text, cls) {
+      const e = document.createElement(tag);
+      if (text !== undefined) e.textContent = text;
+      if (cls) e.className = cls;
+      return e;
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function safeFileBase(raw) {
+      const cleaned = String(raw || "").trim().replace(/[\\/:*?"<>|]+/g, "_");
+      return cleaned || meetingId || "report";
+    }
+
+    function reportModeOf(v) {
+      return v === "lecture" ? "lecture" : "meeting";
+    }
+
+    // ---------------- authentication ----------------
+    function getCurrentUser() {
+      try { return JSON.parse(localStorage.getItem("ma_user") || "null"); }
+      catch (e) { return null; }
+    }
+
+    // Returns a normalized user namespace so each user's files and history stay completely isolated
+    function userScopeKey() {
+      const u = getCurrentUser();
+      if (!u || !u.email) return "guest";
+      return u.email.trim().toLowerCase().replace(/[^a-z0-9@._-]+/g, "_");
+    }
+
+    function recentStorageKey() {
+      return "ma_recent::" + userScopeKey();
+    }
+
+    function reportsStorageKey() {
+      return "ma_reports::" + userScopeKey();
+    }
+
+    function setCurrentUser(user) {
+      try {
+        if (user) localStorage.setItem("ma_user", JSON.stringify(user));
+        else localStorage.removeItem("ma_user");
+      } catch (e) { /* storage unavailable */ }
+      updateAuthUI();
+    }
+
+    function getUsersStore() {
+      try { return JSON.parse(localStorage.getItem("ma_users") || "{}"); }
+      catch (e) { return {}; }
+    }
+
+    function saveUsersStore(store) {
+      try { localStorage.setItem("ma_users", JSON.stringify(store)); }
+      catch (e) { /* storage unavailable */ }
+    }
+
+    function updateAuthUI() {
+      const user = getCurrentUser();
+      if (user) {
+        userBar.hidden = false;
+        userGreeting.textContent = user.name || user.email;
+      } else {
+        userBar.hidden = true;
+        userGreeting.textContent = "";
+      }
+    }
+
+    authToggleBtn.onclick = () => {
+      isRegisterMode = !isRegisterMode;
+      authError.textContent = "";
+      nameField.hidden = !isRegisterMode;
+      authHeading.textContent = isRegisterMode ? "Create an Audio Note account" : "Sign in to Audio Note";
+      authSub.textContent = isRegisterMode
+        ? "Create a local profile to keep your lectures and meeting notes separate."
+        : "Sign in to access your private lecture notes, Google Meet transcripts, and saved reports.";
+      authSubmitBtn.textContent = isRegisterMode ? "Create account" : "Sign in";
+      authToggleText.textContent = isRegisterMode ? "Already have an account?" : "Don't have an account?";
+      authToggleBtn.textContent = isRegisterMode ? "Sign in" : "Create account";
+    };
+
+    authForm.onsubmit = ev => {
+      ev.preventDefault();
+      authError.textContent = "";
+      const email = authEmail.value.trim().toLowerCase();
+      const password = authPassword.value;
+      const name = authName.value.trim();
+
+      if (!email || !email.includes("@")) {
+        authError.textContent = "Please enter a valid email address.";
+        authEmail.focus();
+        return;
+      }
+      if (!password || password.length < 4) {
+        authError.textContent = "Password must be at least 4 characters.";
+        authPassword.focus();
+        return;
+      }
+
+      const users = getUsersStore();
+
+      if (isRegisterMode) {
+        if (!name) {
+          authError.textContent = "Please enter your full name.";
+          authName.focus();
+          return;
+        }
+        if (users[email]) {
+          authError.textContent = "An account with this email already exists. Please sign in.";
+          return;
+        }
+        users[email] = { name, email, password };
+        saveUsersStore(users);
+        setCurrentUser({ name, email });
+      } else {
+        const existing = users[email];
+        if (existing) {
+          if (existing.password !== password) {
+            authError.textContent = "Incorrect password. Please try again.";
+            authPassword.focus();
+            return;
+          }
+          setCurrentUser({ name: existing.name, email: existing.email });
+        } else {
+          const derivedName = email.split("@")[0];
+          users[email] = { name: derivedName, email, password };
+          saveUsersStore(users);
+          setCurrentUser({ name: derivedName, email });
+        }
+      }
+
+      authPassword.value = "";
+      resetSession();
+      navigate("home");
+    };
+
+    logoutBtn.onclick = () => {
+      if (running) {
+        alert("A session is running. Press Stop before signing out.");
+        return;
+      }
+      resetSession();
+      setCurrentUser(null);
+      history.replaceState({ view: "login" }, "", "#login");
+      showView("login");
+    };
+
+    // ---------------- navigation (Back from any section returns to Home) ----------------
+    function normalizeView(v) {
+      if (!getCurrentUser()) return "login";
+      return ["home", "history", "lecture", "meeting"].includes(v) ? v : "home";
+    }
+
+    function navigate(v) {
+      if (!getCurrentUser()) {
+        history.replaceState({ view: "login" }, "", "#login");
+        showView("login");
+        return;
+      }
+
+      const target = normalizeView(v);
+      if (running && target !== view) {
+        alert("A session is running. Press Stop first.");
+        return;
+      }
+
+      if (target === "home") {
+        history.replaceState({ view: "home" }, "", "#home");
+      } else {
+        if (view === "home") {
+          history.replaceState({ view: "home" }, "", "#home");
+          history.pushState({ view: target }, "", "#" + target);
+        } else {
+          history.replaceState({ view: target }, "", "#" + target);
+        }
+      }
+      showView(target);
+    }
+
+    document.addEventListener("click", ev => {
+      const link = ev.target.closest("a[data-nav]");
+      if (!link) return;
+      ev.preventDefault();
+      navigate(link.getAttribute("data-nav"));
+    });
+
+    backToHistoryBtn.onclick = () => {
+      navigate("history");
+    };
+
+    window.addEventListener("popstate", () => {
+      if (!getCurrentUser()) {
+        showView("login");
+        return;
+      }
+      const next = normalizeView((location.hash || "").replace("#", ""));
+      if (running && next !== view) {
+        alert("A session is running. Press Stop first.");
+        history.pushState({ view }, "", "#" + view);
+        return;
+      }
+      if (view !== "home") {
+        history.replaceState({ view: "home" }, "", "#home");
+        showView("home");
+      } else {
+        showView(next);
+      }
+    });
+
+    function showView(v) {
+      v = normalizeView(v);
+      view = v;
+      $("view-login").hidden = v !== "login";
+      $("view-home").hidden = v !== "home";
+      $("view-history").hidden = v !== "history";
+      $("view-session").hidden = (v === "login" || v === "home" || v === "history");
+
+      if (v === "history") {
+        renderRecent();
+      } else if (v !== "home" && v !== "login") {
+        const isSavedView = Boolean(pendingOpen);
+        const m = MODES[v];
+
+        historyNav.hidden = !isSavedView;
+        controlsEl.hidden = isSavedView;
+        subsPanel.hidden = isSavedView;
+
+        if (isSavedView) {
+          const p = pendingOpen;
+          pendingOpen = null;
+          $("sIcon").textContent = "\u{1F4C4}";
+          $("sTitle").textContent = p.filename || p.id || "Saved Report";
+          $("sLead").textContent = (p.mode === "lecture" ? "Lecture / video report" : "Google Meet report") + " \u00B7 Session ID: " + p.id;
+          meetBox.hidden = true;
+          meetHistoryBox.hidden = true;
+          resetSession();
+          loadReport(p.id, p.mode, p.filename);
+        } else {
+          $("sIcon").textContent = m.icon;
+          $("sTitle").textContent = m.title;
+          $("sLead").textContent = m.lead;
+          meetBox.hidden = v !== "meeting";
+          meetHistoryBox.hidden = v !== "meeting";
+          if (v === "meeting") renderMeetHistory();
+          resetSession();
+        }
+      }
+
+      window.scrollTo(0, 0);
+    }
+
+    function resetSession() {
+      subs.innerHTML = "";
+      subs.appendChild(el("span", "Subtitles appear here when a session runs.", "sub-empty"));
+      statusEl.textContent = "";
+      meetingIdEl.textContent = "";
+      fileNameInput.value = "";
+      reviewEl.hidden = true;
+      reportEl.hidden = true;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      reviewBtn.disabled = true;
+      currentReportData = null;
+      segs = [];
+      meetingId = "";
+      buildSpeakers();
+    }
+
+    // ---------------- user-scoped recent sessions & cached reports ----------------
+    function loadRecent() {
+      try { return JSON.parse(localStorage.getItem(recentStorageKey()) || "[]"); }
+      catch (e) { return []; }
+    }
+
+    function saveRecent(item) {
+      try {
+        const list = loadRecent().filter(x => x.id !== item.id);
+        list.unshift({ ...item, owner: userScopeKey() });
+        localStorage.setItem(recentStorageKey(), JSON.stringify(list.slice(0, 50)));
+      } catch (e) { /* storage not available */ }
+    }
+
+    function cacheReportLocal(id, mode, data) {
+      try {
+        const store = JSON.parse(localStorage.getItem(reportsStorageKey()) || "{}");
+        const scopedData = { ...data, owner: userScopeKey() };
+        store[id + "::" + mode] = scopedData;
+        store[id] = scopedData;
+        localStorage.setItem(reportsStorageKey(), JSON.stringify(store));
+      } catch (e) { /* storage not available */ }
+    }
+
+    function getCachedReportLocal(id, mode) {
+      try {
+        const store = JSON.parse(localStorage.getItem(reportsStorageKey()) || "{}");
+        return store[id + "::" + mode] || store[id] || null;
+      } catch (e) { return null; }
+    }
+
+    function renderRecent() {
+      const box = $("recentBox");
+      box.innerHTML = "";
+      const list = loadRecent();
+      if (!list.length) {
+        box.appendChild(el("div", "No saved sessions yet for this account. Start a Lecture / video or Google Meet session first.", "empty"));
+        return;
+      }
+
+      const table = el("table", undefined, "recent-table");
+      const head = document.createElement("tr");
+      ["Type", "Session", "Lines", "Date", ""].forEach(h => head.appendChild(el("th", h)));
+      table.appendChild(head);
+
+      const tbody = document.createElement("tbody");
+      list.forEach(x => {
+        const tr = document.createElement("tr");
+        tr.title = "Click to open saved report";
+        tr.onclick = () => openSaved(x.id, x.mode, x.filename);
+        tr.appendChild(el("td", x.mode === "lecture" ? "Lecture / video" : "Meeting"));
+        tr.appendChild(el("td", x.filename || x.id, "id"));
+        tr.appendChild(el("td", String(x.lines)));
+        tr.appendChild(el("td", new Date(x.when).toLocaleString()));
+        const td = document.createElement("td");
+        const b = el("button", "Open report", "btn secondary small");
+        b.onclick = ev => {
+          ev.stopPropagation();
+          openSaved(x.id, x.mode, x.filename);
+        };
+        td.appendChild(b);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      box.appendChild(table);
+    }
+
+    function renderMeetHistory() {
+      meetHistoryList.innerHTML = "";
+      const list = loadRecent().filter(x => x.mode !== "lecture");
+      if (!list.length) {
+        meetHistoryList.appendChild(el("div", "No past Google Meet sessions yet for this account.", "empty"));
+        return;
+      }
+
+      const table = el("table", undefined, "recent-table");
+      const head = document.createElement("tr");
+      ["Session", "Lines", "Date", ""].forEach(h => head.appendChild(el("th", h)));
+      table.appendChild(head);
+
+      const tbody = document.createElement("tbody");
+      list.forEach(x => {
+        const tr = document.createElement("tr");
+        tr.title = "Click to open saved report";
+        tr.onclick = () => openSaved(x.id, "meeting", x.filename);
+        tr.appendChild(el("td", x.filename || x.id, "id"));
+        tr.appendChild(el("td", String(x.lines)));
+        tr.appendChild(el("td", new Date(x.when).toLocaleString()));
+        const td = document.createElement("td");
+        const b = el("button", "Open report", "btn secondary small");
+        b.onclick = ev => {
+          ev.stopPropagation();
+          openSaved(x.id, "meeting", x.filename);
+        };
+        td.appendChild(b);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      meetHistoryList.appendChild(table);
+    }
+
+    function openSaved(id, mode, filename) {
+      pendingOpen = { id, mode, filename };
+      navigate(mode === "lecture" ? "lecture" : "meeting");
+    }
+
+    async function loadReport(id, mode, filename) {
+      meetingId = id;
+      meetingIdEl.textContent = "Session id: " + id;
+      const userParam = "&user=" + encodeURIComponent(userScopeKey());
+
+      const localCached = getCachedReportLocal(id, mode);
+      if (localCached) {
+        if (filename && !localCached.filename) localCached.filename = filename;
+        $("sTitle").textContent = localCached.filename || filename || id;
+        showReport(localCached);
+        statusEl.textContent = "Opened saved report for '" + id + "'";
+        return;
+      }
+
+      statusEl.textContent = "Opening saved report for '" + id + "'...";
+      try {
+        const savedRes = await fetch("/api/report/" + encodeURIComponent(id) + "?mode=" + encodeURIComponent(mode) + userParam);
+        if (savedRes.ok) {
+          const savedData = await savedRes.json();
+          if (savedData && savedData.found) {
+            if (filename && !savedData.filename) savedData.filename = filename;
+            $("sTitle").textContent = savedData.filename || filename || id;
+            cacheReportLocal(id, mode, savedData);
+            showReport(savedData);
+            statusEl.textContent = "Opened saved report for '" + id + "'";
+            return;
+          }
+        }
+      } catch (e) { /* fall through */ }
+
+      statusEl.textContent = "No saved report yet. Generating report for '" + id + "'...";
+      try {
+        const res = await fetch("/api/report/" + encodeURIComponent(id) + "?mode=" + encodeURIComponent(mode) + userParam, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user: userScopeKey(), segments: [] })
+        });
+        if (!res.ok) throw new Error("server error " + res.status);
+        const data = await res.json();
+        if (!data.segments || data.segments.length === 0) {
+          statusEl.textContent = "No saved lines found for '" + id + "'.";
+          return;
+        }
+        if (filename && !data.filename) data.filename = filename;
+        $("sTitle").textContent = data.filename || filename || id;
+        cacheReportLocal(id, mode, data);
+        showReport(data);
+        statusEl.textContent = "Report for '" + id + "'";
+      } catch (err) {
+        statusEl.textContent = "Failed: " + err.message;
+      }
+    }
+
+    // ---------------- current speaker ----------------
+    function buildSpeakers() {
+      speakers = namesInput.value.split(",").map(s => s.trim()).filter(Boolean);
+      if (current !== "Unknown" && !speakers.includes(current)) current = speakers[0] || "Unknown";
+      speakerNowEl.textContent = speakers.length ? current : "-";
+    }
+
+    function setSpeaker(name, ago) {
+      current = name;
+      buildSpeakers();
+      // "Name|ms": the speech began ms milliseconds ago (sent by Google Meet only)
+      if (ws && ws.readyState === 1) ws.send("speaker:" + name + (ago ? "|" + Math.round(ago) : ""));
+    }
+
+    namesInput.onchange = () => {
+      buildSpeakers();
+      if (ws && ws.readyState === 1) ws.send("speaker:" + current);
+    };
+
+    buildSpeakers();
+
+    // ---------------- messages from the Chrome extension ----------------
+    window.addEventListener("message", e => {
+      if (e.source !== window || !e.data || e.data.source !== "meeting-agent-bridge") return;
+      const msg = e.data;
+      bridgeChip.classList.add("ok");
+      if (msg.type === "participants") {
+        namesInput.value = msg.names.join(", ");
+        buildSpeakers();
+        if (ws && ws.readyState === 1) ws.send("speaker:" + current);
+        bridgeText.textContent = "Google Meet extension: connected \u00B7 " + msg.names.join(", ");
+      }
+      if (msg.type === "speaker") {
+        const names = namesInput.value.split(",").map(s => s.trim()).filter(Boolean);
+        if (!names.includes(msg.name)) namesInput.value = [...names, msg.name].join(", ");
+        setSpeaker(msg.name, msg.ago);
+        bridgeText.textContent = "Google Meet extension: connected \u00B7 " + msg.name + " is speaking";
+      }
+    });
+
+    // ---------------- audio capture ----------------
+    const workletCode = `
+      class PCM extends AudioWorkletProcessor {
+        constructor() { super(); this.buf = []; this.n = 0; }
+        process(inputs) {
+          const ch = inputs[0][0];
+          if (!ch) return true;
+          this.buf.push(new Float32Array(ch));
+          this.n += ch.length;
+          if (this.n >= 1600) {
+            const out = new Int16Array(this.n);
+            let k = 0;
+            for (const b of this.buf) {
+              for (let i = 0; i < b.length; i++) {
+                const s = Math.max(-1, Math.min(1, b[i]));
+                out[k++] = s < 0 ? s * 32768 : s * 32767;
+              }
+            }
+            this.port.postMessage(out.buffer, [out.buffer]);
+            this.buf = [];
+            this.n = 0;
+          }
+          return true;
+        }
+      }
+      registerProcessor("pcm", PCM);
+    `;
+
+    async function getStream() {
+      const s = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+      if (s.getAudioTracks().length === 0) {
+        s.getTracks().forEach(t => t.stop());
+        throw new Error("No audio was shared. Choose a Chrome Tab and tick 'Also share tab audio'.");
+      }
+
+      micStream = null;
+      if (view === "meeting") {
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: true }
+          });
+        } catch (err) {
+          s.getTracks().forEach(t => t.stop());
+          throw new Error("Could not open the microphone: " + err.message);
+        }
+      }
+      return s;
+    }
+
+    function setRunning(on) {
+      running = on;
+      startBtn.disabled = on;
+      stopBtn.disabled = !on;
+      liveChip.hidden = !on;
+      liveChip.className = "chip" + (on ? " live" : "");
+    }
+
+    async function startCapture() {
+      stream = null;
+      if (view === "meeting") current = "Unknown";   // nobody is speaking yet: wait for Google Meet to say who
+
+      if (view === "lecture") {
+        namesInput.value = "Speaker";
+        current = "Speaker";
+        buildSpeakers();
+      }
+
+      try {
+        stream = await getStream();
+      } catch (err) {
+        statusEl.textContent = "Could not start: " + err.message;
+        return;
+      }
+
+      subs.innerHTML = "";
+      segs = [];
+      reviewEl.hidden = true;
+      reportEl.hidden = true;
+      reviewBtn.disabled = true;
+
+      const sock = new WebSocket("ws://" + location.host + "/ws?user=" + encodeURIComponent(userScopeKey()));
+      ws = sock;
+
+      sock.onmessage = e => {
+        const m = JSON.parse(e.data);
+        if (m.type === "status") statusEl.textContent = m.text;
+        if (m.type === "meeting") {
+          meetingId = m.id;
+          meetingIdEl.textContent = "Session id: " + m.id;
+        }
+        if (m.type === "subtitle") {
+          segs.push({ id: m.id, speaker: m.speaker, start: m.start, end: m.end, text: m.text });
+          const p = document.createElement("p");
+          p.appendChild(el("small", fmt(m.start)));
+          if (view !== "lecture") {
+            const who = el("b", m.speaker + ":");
+            who.style.color = COLORS[Math.max(0, speakers.indexOf(m.speaker)) % COLORS.length];
+            p.appendChild(who);
+          }
+          p.appendChild(document.createTextNode(m.text));
+          subs.appendChild(p);
+          p.scrollIntoView({ block: "nearest" });
+        }
+        if (m.type === "done") {
+          statusEl.textContent = "Finished. You can review the transcript now.";
+          startBtn.disabled = false;
+          reviewBtn.disabled = false;
+          if (segs.length) {
+            saveRecent({ id: meetingId, mode: reportModeOf(view), when: Date.now(), lines: segs.length });
+          }
+          setTimeout(() => sock.close(), 300);
+        }
+      };
+
+      await new Promise(res => sock.onopen = res);
+      sock.send("user:" + userScopeKey());
+      sock.send("speaker:" + current);
+
+      audioCtx = new AudioContext({ sampleRate: 16000 });
+      const url = URL.createObjectURL(new Blob([workletCode], { type: "application/javascript" }));
+      await audioCtx.audioWorklet.addModule(url);
+      const node = new AudioWorkletNode(audioCtx, "pcm");
+      node.port.onmessage = e => {
+        if (sock.readyState === 1) sock.send(e.data);
+      };
+
+      const mute = audioCtx.createGain();
+      mute.gain.value = 0;
+      node.connect(mute);
+      mute.connect(audioCtx.destination);
+      setRunning(true);
+
+      const src = audioCtx.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+      src.connect(node);
+      if (micStream) {
+        const micSrc = audioCtx.createMediaStreamSource(micStream);
+        micSrc.connect(node);
+      }
+      statusEl.textContent = micStream ? "Listening (tab audio + microphone)..." : "Listening (tab audio)...";
+    }
+
+    function stopCapture() {
+      if (!running) return;
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+      if (audioCtx) audioCtx.close();
+
+      const sock = ws;
+      if (sock && sock.readyState === 1) sock.send("stop");
+      statusEl.textContent = "Finishing the last sentences...";
+
+      setTimeout(() => {
+        startBtn.disabled = false;
+        reviewBtn.disabled = false;
+        if (sock && sock.readyState === 1) sock.close();
+      }, 120000);
+
+      setRunning(false);
+      startBtn.disabled = false;
+    }
+
+    startBtn.onclick = startCapture;
+    stopBtn.onclick = stopCapture;
+    window.startCapture = startCapture;
+    window.stopCapture = stopCapture;
+
+    // ---------------- review screen ----------------
+    reviewBtn.onclick = () => {
+      reviewList.innerHTML = "";
+      segs.forEach(s => {
+        const row = el("div", undefined, "rrow");
+        row.appendChild(el("small", fmt(s.start)));
+        if (view !== "lecture") {
+          const sel = document.createElement("select");
+          new Set([...speakers, s.speaker]).forEach(n => {
+            const o = el("option", n);
+            o.value = n;
+            if (n === s.speaker) o.selected = true;
+            sel.appendChild(o);
+          });
+          sel.onchange = () => { s.speaker = sel.value; };
+          row.appendChild(sel);
+        }
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.value = s.text;
+        inp.oninput = () => { s.text = inp.value; };
+        row.appendChild(inp);
+        reviewList.appendChild(row);
+      });
+      if (!fileNameInput.value.trim()) {
+        fileNameInput.value = meetingId || "";
+      }
+      reviewEl.hidden = false;
+      fileNameInput.focus();
+      reviewEl.scrollIntoView({ behavior: "smooth" });
+    };
+
+    // ---------------- generate and show the report ----------------
+    genBtn.onclick = async () => {
+      const typedName = fileNameInput.value.trim();
+      if (!typedName) {
+        genStatus.textContent = "Please enter a file name before generating the report.";
+        fileNameInput.focus();
+        return;
+      }
+
+      genBtn.disabled = true;
+      genStatus.textContent = "Generating report... this can take about a minute";
+      const mode = reportModeOf(view);
+      const chosenName = safeFileBase(typedName);
+      const userScope = userScopeKey();
+      try {
+        const res = await fetch("/api/report/" + encodeURIComponent(meetingId) + "?mode=" + mode + "&user=" + encodeURIComponent(userScope), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user: userScope,
+            filename: chosenName,
+            segments: segs.map(s => ({ id: s.id, speaker: s.speaker, text: s.text }))
+          })
+        });
+        if (!res.ok) throw new Error("server error " + res.status);
+        const data = await res.json();
+        data.filename = chosenName;
+        cacheReportLocal(meetingId, mode, data);
+        saveRecent({
+          id: meetingId,
+          filename: chosenName,
+          mode: mode,
+          when: Date.now(),
+          lines: (data.segments && data.segments.length) || segs.length
+        });
+        showReport(data);
+        genStatus.textContent = "Done";
+      } catch (err) {
+        genStatus.textContent = "Failed: " + err.message;
+      }
+      genBtn.disabled = false;
+    };
+
+    // ---------------- export helpers (.DOC and .PDF) ----------------
+    function buildReportPlainText(data, title) {
+      const lines = [];
+      lines.push(title.toUpperCase());
+      lines.push("Session ID: " + (meetingId || "session"));
+      lines.push("Mode: " + (data.mode || "report"));
+      lines.push("");
+
+      if (data.overview && data.overview.length) {
+        lines.push("OVERVIEW");
+        data.overview.forEach(o => lines.push("- " + o.text));
+        lines.push("");
+      }
+
+      if (data.summary) {
+        lines.push("SUMMARY");
+        lines.push(data.summary);
+        lines.push("");
+      }
+
+      if (data.sections && data.sections.length) {
+        lines.push("STUDY SECTIONS");
+        data.sections.forEach(sec => {
+          lines.push("[" + fmt(sec.at || 0) + "] " + (sec.heading || "Section"));
+          (sec.points || []).forEach(p => {
+            lines.push("  * (" + fmt(p.at || 0) + ") " + p.text);
+          });
+        });
+        lines.push("");
+      }
+
+      if (data.notes && data.notes.length) {
+        lines.push("NOTES");
+        data.notes.forEach(n => {
+          lines.push("\u2022 " + n.text);
+        });
+        lines.push("");
+      }
+
+      if (data.glossary && data.glossary.length) {
+        lines.push("GLOSSARY");
+        data.glossary.forEach(g => {
+          lines.push("- " + g.term + (g.definition ? ": " + g.definition : ""));
+        });
+        lines.push("");
+      }
+
+      const terms = data.keyterms || data.entities || [];
+      if (terms.length) {
+        lines.push("KEY TERMS");
+        lines.push(terms.join(", "));
+        lines.push("");
+      }
+
+      if (data.action_items && data.action_items.length) {
+        lines.push("ACTION ITEMS");
+        data.action_items.forEach(a => {
+          const due = a.due ? " (Due: " + a.due + ")" : "";
+          lines.push("- " + a.owner + ": " + a.task + due + " [Said by " + a.said_by + "]");
+        });
+        lines.push("");
+      }
+
+      if (data.key_dates && data.key_dates.length) {
+        lines.push("KEY DATES");
+        data.key_dates.forEach(d => {
+          lines.push("- " + (d.dates || []).join(", ") + ": " + d.text + " (" + d.said_by + ")");
+        });
+        lines.push("");
+      }
+
+      if (data.speakers && Object.keys(data.speakers).length) {
+        lines.push("WHO SAID WHAT");
+        Object.entries(data.speakers).forEach(([name, r]) => {
+          lines.push(name + " (" + r.segments + " segments, " + r.talk_seconds + "s)");
+          if (r.points && r.points.length) {
+            r.points.forEach(p => lines.push("  * (" + fmt(p.at || 0) + ") " + p.text));
+          } else if (r.lines && r.lines.length) {
+            r.lines.forEach(l => lines.push("  * " + l));
+          }
+        });
+      }
+
+      return lines.join("\n");
+    }
+
+    function downloadDoc(data, fileBase) {
+      const bodyClone = reportEl.cloneNode(true);
+      bodyClone.querySelectorAll(".actions-row").forEach(el => el.remove());
+      const htmlDoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(fileBase)}</title>
+        <style>body{font-family:Calibri,Arial,sans-serif;line-height:1.5;color:#111;}
+        h3,h4{margin-top:16px;}table{border-collapse:collapse;width:100%;}
+        th,td{border:1px solid #ccc;padding:6px;text-align:left;}</style></head><body>${bodyClone.innerHTML}</body></html>`;
+      const blob = new Blob(["\ufeff", htmlDoc], { type: "application/msword" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fileBase + ".doc";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function pdfSafeText(str) {
+      return String(str || "")
+        .replace(/[^\x20-\x7E]/g, " ")
+        .replace(/\\/g, "\\\\")
+        .replace(/\(/g, "\\(")
+        .replace(/\)/g, "\\)");
+    }
+
+    function wrapPdfLines(text, maxChars = 88) {
+      const out = [];
+      text.split("\n").forEach(rawLine => {
+        if (!rawLine.trim()) {
+          out.push("");
+          return;
+        }
+        const words = rawLine.split(/\s+/);
+        let cur = "";
+        words.forEach(w => {
+          const next = cur ? cur + " " + w : w;
+          if (next.length > maxChars && cur) {
+            out.push(cur);
+            cur = w;
+          } else {
+            cur = next;
+          }
+        });
+        if (cur) out.push(cur);
+      });
+      return out;
+    }
+
+    function downloadPdf(data, fileBase) {
+      const wrapped = wrapPdfLines(buildReportPlainText(data, fileBase), 88);
+      const linesPerPage = 46;
+      const pages = [];
+      for (let i = 0; i < wrapped.length; i += linesPerPage) {
+        pages.push(wrapped.slice(i, i + linesPerPage));
+      }
+      if (!pages.length) pages.push(["Empty report"]);
+
+      const objects = [];
+      const catalogId = 1;
+      const pagesId = 2;
+      const fontId = 3;
+      const pageIds = [];
+      const contentIds = [];
+
+      let nextId = 4;
+      for (let p = 0; p < pages.length; p++) {
+        pageIds.push(nextId++);
+        contentIds.push(nextId++);
+      }
+
+      objects[catalogId] = `${catalogId} 0 obj\n<< /Type /Catalog /Pages ${pagesId} 0 R >>\nendobj\n`;
+      objects[pagesId] = `${pagesId} 0 obj\n<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>\nendobj\n`;
+      objects[fontId] = `${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`;
+
+      for (let p = 0; p < pages.length; p++) {
+        const pid = pageIds[p];
+        const cid = contentIds[p];
+        const streamParts = ["BT", "/F1 10 Tf", "50 750 Td", "14 TL"];
+        pages[p].forEach((ln, idx) => {
+          if (idx === 0) streamParts.push(`(${pdfSafeText(ln)}) Tj`);
+          else streamParts.push(`T* (${pdfSafeText(ln)}) Tj`);
+        });
+        streamParts.push("ET");
+        const streamStr = streamParts.join("\n");
+        objects[cid] = `${cid} 0 obj\n<< /Length ${streamStr.length} >>\nstream\n${streamStr}\nendstream\nendobj\n`;
+        objects[pid] = `${pid} 0 obj\n<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontId} 0 R >> >> /Contents ${cid} 0 R >>\nendobj\n`;
+      }
+
+      let pdf = "%PDF-1.4\n";
+      const offsets = [0];
+      for (let id = 1; id < objects.length; id++) {
+        offsets[id] = pdf.length;
+        pdf += objects[id];
+      }
+      const xrefPos = pdf.length;
+      pdf += `xref\n0 ${objects.length}\n`;
+      pdf += "0000000000 65535 f \n";
+      for (let id = 1; id < objects.length; id++) {
+        pdf += String(offsets[id]).padStart(10, "0") + " 00000 n \n";
+      }
+      pdf += `trailer\n<< /Size ${objects.length} /Root ${catalogId} 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+
+      const blob = new Blob([pdf], { type: "application/pdf" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fileBase + ".pdf";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    function showReport(data) {
+      currentReportData = data;
+      const typedName = fileNameInput.value.trim();
+      const fileBase = safeFileBase(typedName || data.filename || meetingId || "report");
+      const headingTitle = typedName || data.filename || meetingId || "Report";
+
+      reportEl.innerHTML = "";
+      reportEl.appendChild(el("h3", headingTitle));
+      reportEl.appendChild(el("h4", "Summary"));
+
+      const sum = el("div", undefined, "summary");
+      if (data.overview && data.overview.length) {
+        data.overview.forEach(o => sum.appendChild(el("p", o.text)));
+      } else if (data.summary_items && data.summary_items.length) {
+        data.summary_items.forEach((it, i) => {
+          const sp = el("span", "\u2022 " + it.text);
+          sp.style.display = "block";
+          sp.style.margin = "0 0 8px";
+          if (it.score !== undefined && it.score < 0.75) {
+            sp.className = "weak";
+            sp.title = "Only partly found in the transcript (match " + Math.round(it.score * 100) + "%)";
+          }
+          sum.appendChild(sp);
+        });
+      } else {
+        sum.textContent = data.summary || "(no summary)";
+      }
+      reportEl.appendChild(sum);
+
+      const c = data.coverage;
+      if (c && c.terms) {
+        let cline = "Concept coverage: " + c.covered + " of " + c.terms + " key terms appear in the notes";
+        if (c.added_points) {
+          cline += " (" + c.added_points + (c.added_points === 1 ? " sentence was" : " sentences were") +
+            " added because the first pass had missed a term)";
+        }
+        reportEl.appendChild(el("div", cline + ".", "stats"));
+      }
+
+      const f = data.faithfulness;
+      if (f && f.sentences) {
+        let line = "Faithfulness check: " + f.supported + " of " + f.sentences +
+          " sentences are supported by the transcript (average match " + Math.round(f.average * 100) + "%).";
+        if (f.rewrites_rejected) {
+          line += " " + f.rewrites_rejected +
+            (f.rewrites_rejected === 1 ? " rewritten note was" : " rewritten notes were") +
+            " replaced by the original sentences because they added things that were not said.";
+        }
+        reportEl.appendChild(el("div", line, "stats"));
+      }
+
+      if (data.sections && data.sections.length) {
+        data.sections.forEach(sec => {
+          reportEl.appendChild(el("h4", fmt(sec.at || 0) + " \u00B7 " + (sec.heading || "Section")));
+          const ul = document.createElement("ul");
+          (sec.points || []).forEach(p => {
+            const li = document.createElement("li");
+            li.appendChild(el("span", fmt(p.at || 0) + "  ", "src"));
+            li.appendChild(document.createTextNode(p.text));
+            if (p.kind === "definition") li.appendChild(el("span", " definition", "chip"));
+            if (p.score !== undefined && p.score < 0.75) li.appendChild(el("span", " check", "chip warn"));
+            ul.appendChild(li);
+          });
+          reportEl.appendChild(ul);
+        });
+      } else if (data.notes && data.notes.length) {
+        reportEl.appendChild(el("h4", "Notes"));
+        const nl = document.createElement("ul");
+        data.notes.forEach(n => {
+          if (!n.text || !n.text.trim()) return;
+          const li = document.createElement("li");
+          li.appendChild(document.createTextNode(n.text.trim()));
+          if (n.score !== undefined && n.score < 0.75) li.appendChild(el("span", " check", "chip warn"));
+          nl.appendChild(li);
+        });
+        reportEl.appendChild(nl);
+      }
+
+      if (data.glossary && data.glossary.length) {
+        reportEl.appendChild(el("h4", "Glossary"));
+        const table = document.createElement("table");
+        const head = document.createElement("tr");
+        ["Term", "Meaning"].forEach(h => head.appendChild(el("th", h)));
+        table.appendChild(head);
+        data.glossary.forEach(g => {
+          const tr = document.createElement("tr");
+          tr.appendChild(el("td", g.term));
+          tr.appendChild(el("td", g.definition ||
+            (g.at !== null && g.at !== undefined ? "First mentioned at " + fmt(g.at) : "")));
+          table.appendChild(tr);
+        });
+        reportEl.appendChild(table);
+      }
+
+      const terms = data.keyterms || data.entities || [];
+      if (data.mode === "lecture" || data.mode === "general") {
+        reportEl.appendChild(el("h4", "Key terms"));
+        reportEl.appendChild(el("div", terms.length ? terms.join(", ") : "none", "stats"));
+      }
+
+      const actions = data.action_items || [];
+      if (data.mode === "meeting") {
+        reportEl.appendChild(el("h4", "Action items"));
+        if (actions.length === 0) {
+          reportEl.appendChild(el("div", "No action items found.", "stats"));
+        } else {
+          const table = document.createElement("table");
+          const head = document.createElement("tr");
+          ["Who", "Task", "Due", "Said by"].forEach(h => head.appendChild(el("th", h)));
+          table.appendChild(head);
+          actions.forEach(a => {
+            const tr = document.createElement("tr");
+            tr.appendChild(el("td", a.owner));
+            tr.appendChild(el("td", a.task));
+            tr.appendChild(el("td", a.due || ""));
+            tr.appendChild(el("td", a.said_by + " (" + fmt(a.at || 0) + ")"));
+            table.appendChild(tr);
+          });
+          reportEl.appendChild(table);
+        }
+      }
+
+      const keyDates = [];
+      (data.key_dates || []).forEach(d => {
+        const key = (d.dates || []).join(", ").toLowerCase();
+        if (!keyDates.slice(-2).some(k => k.key === key)) keyDates.push({ key, d });
+      });
+
+      reportEl.appendChild(el("h4", "Key dates"));
+      if (keyDates.length === 0) {
+        reportEl.appendChild(el("div", "No dates mentioned.", "stats"));
+      } else {
+        const ul = document.createElement("ul");
+        keyDates.forEach(({ d }) => {
+          ul.appendChild(el("li", (d.dates || []).join(", ") + " - " + d.text + " (" + d.said_by + ")"));
+        });
+        reportEl.appendChild(ul);
+      }
+
+      if (data.mode === "meeting") {
+        reportEl.appendChild(el("h4", "Who said what"));
+        Object.entries(data.speakers || {}).forEach(([name, r]) => {
+          reportEl.appendChild(el("h4", name));
+          reportEl.appendChild(el("div",
+            r.segments + " segments, talk time " + r.talk_seconds + " s", "stats"));
+          const ul = document.createElement("ul");
+          const pts = (r.points && r.points.length) ? r.points : (r.lines || []).map(t => ({ text: t, at: null }));
+          pts.forEach(p => {
+            const li = document.createElement("li");
+            if (p.at !== null && p.at !== undefined) li.appendChild(el("span", fmt(p.at) + "  ", "src"));
+            li.appendChild(document.createTextNode(p.text));
+            ul.appendChild(li);
+          });
+          reportEl.appendChild(ul);
+        });
+      }
+
+      const row = el("div", undefined, "actions-row");
+
+      const pdfBtn = el("button", "Download (.PDF)", "btn secondary small");
+      pdfBtn.onclick = () => downloadPdf(data, fileBase);
+      row.appendChild(pdfBtn);
+
+      const docBtn = el("button", "Download (.DOC)", "btn secondary small");
+      docBtn.onclick = () => downloadDoc(data, fileBase);
+      row.appendChild(docBtn);
+
+      const pr = el("button", "Print / Save PDF", "btn secondary small");
+      pr.onclick = () => window.print();
+      row.appendChild(pr);
+
+      reportEl.appendChild(row);
+      reportEl.hidden = false;
+      reportEl.scrollIntoView({ behavior: "smooth" });
+    }
+
+    // ---------------- start ----------------
+    updateAuthUI();
+    const initialView = normalizeView((location.hash || "").replace("#", ""));
+    history.replaceState({ view: initialView }, "", "#" + initialView);
+    showView(initialView);
+  </script>
+</body>
+</html>

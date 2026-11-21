@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Private data: transcripts, saved reports, datasets
+data/
+*.db
+
+# Large downloaded models
+models/
+
+# Recordings
+*.mp3
+*.wav
+
+# Secrets and editor files
+.env
+.vscode/
