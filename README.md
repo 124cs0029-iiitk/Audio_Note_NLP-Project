@@ -125,11 +125,3 @@ requirements.txt
 - CPU only. A one-hour lecture takes about one hour to transcribe, because it runs in real time.
 - Tested on Windows with Chrome.
 
-## Evaluation (measured during development with separate scripts)
-
-| Measure | Result |
-|---|---|
-| Whisper word error rate, 100 AMI meeting clips | tiny 19.6%, **base 17.5%**, small 15.4% |
-| Live subtitle delay (18 sentences) | mean 2.44 s, median 2.23 s |
-| Meeting summaries, ROUGE-1 on 5 QMSum meetings | **hierarchical 33.8**, single pass 30.8, first 100 words 13.8 |
-| Entities, 34 hand-labelled entities | F1 0.88 strict, 0.97 lenient |
