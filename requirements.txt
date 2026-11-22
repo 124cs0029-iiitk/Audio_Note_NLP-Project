@@ -1,0 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+faster-whisper>=1.0
+av>=14,<17
+numpy>=1.26
+torch
+transformers>=4.40

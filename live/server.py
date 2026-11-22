@@ -14,7 +14,6 @@ import numpy as np
 from faster_whisper import WhisperModel
 from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 app = FastAPI()
 ROOT = Path(__file__).parent.parent
@@ -22,13 +21,9 @@ PAGE = Path(__file__).parent / "index.html"
 DATA_DIR = ROOT / "data"
 REPORTS_DIR = DATA_DIR / "reports"
 DB_PATH = DATA_DIR / "meetings.db"
-REPLAY_DIR = ROOT / "replay"
 
 DATA_DIR.mkdir(exist_ok=True)
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-REPLAY_DIR.mkdir(exist_ok=True)
-
-app.mount("/replay", StaticFiles(directory=str(REPLAY_DIR)), name="replay")
 
 print("Loading Whisper base model...")
 model = WhisperModel("base", device="cpu", compute_type="int8")
@@ -220,17 +215,19 @@ def _safe_id(meeting_id: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "_", meeting_id)
 
 
+REPORT_MODES = ("meeting", "lecture", "general", "class")
+
+
 def _report_file(meeting_id: str, mode: str | None = None) -> Path | None:
+    """The saved report of exactly this session (a session whose id starts the same way is never used)."""
     sid = _safe_id(meeting_id)
     if mode:
         p = REPORTS_DIR / f"{sid}_{_safe_id(mode)}.json"
         if p.exists():
             return p
-    matches = sorted(REPORTS_DIR.glob(f"{sid}_*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
-    if matches:
-        return matches[0]
-    fallback = REPORTS_DIR / f"{sid}.json"
-    return fallback if fallback.exists() else None
+    candidates = [REPORTS_DIR / f"{sid}_{m}.json" for m in REPORT_MODES] + [REPORTS_DIR / f"{sid}.json"]
+    existing = [p for p in candidates if p.exists()]
+    return max(existing, key=lambda p: p.stat().st_mtime) if existing else None
 
 
 def save_report_file(meeting_id: str, mode: str, payload: dict):
@@ -267,16 +264,6 @@ def index():
     )
 
 
-@app.get("/api/replays")
-def list_replays():
-    """Test meetings: every name.mp3 that has a name_speakers.json next to it."""
-    names = []
-    for mp3 in sorted(REPLAY_DIR.glob("*.mp3")):
-        if (REPLAY_DIR / f"{mp3.stem}_speakers.json").exists():
-            names.append(mp3.stem)
-    return names
-
-
 @app.get("/api/report/{meeting_id}")
 def get_saved_report(meeting_id: str, mode: str | None = None):
     path = _report_file(meeting_id, mode)
@@ -285,6 +272,31 @@ def get_saved_report(meeting_id: str, mode: str | None = None):
     data = json.loads(path.read_text(encoding="utf-8"))
     data["found"] = True
     return JSONResponse(data)
+
+
+@app.delete("/api/report/{meeting_id}")
+def delete_session(meeting_id: str):
+    """Delete one session: its saved report files and its transcript lines.
+    Only the exact files of this session are removed (another session whose id starts the same way is safe)."""
+    sid = _safe_id(meeting_id)
+    names = [f"{sid}.json"] + [f"{sid}_{mode}.json" for mode in REPORT_MODES]
+    reports = 0
+    for name in names:
+        path = REPORTS_DIR / name
+        if path.exists():
+            path.unlink()
+            reports += 1
+    lines = 0
+    if DB_PATH.exists():
+        db = sqlite3.connect(DB_PATH)
+        try:
+            lines = db.execute("DELETE FROM segments WHERE meeting_id=?", (meeting_id,)).rowcount
+            db.commit()
+        except sqlite3.OperationalError:        # no table yet: nothing to delete
+            lines = 0
+        finally:
+            db.close()
+    return {"deleted": True, "reports": reports, "lines": lines}
 
 
 @app.post("/api/report/{meeting_id}")

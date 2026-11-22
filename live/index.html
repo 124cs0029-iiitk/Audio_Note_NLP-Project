@@ -397,6 +397,15 @@
       color: #94a3b8;
     }
 
+    .btn.secondary.delete {
+      color: var(--red);
+      border-color: #fecaca;
+    }
+
+    .btn.secondary.delete:hover:not(:disabled) {
+      background: #fef2f2;
+    }
+
     [hidden] {
       display: none !important;
     }
@@ -605,7 +614,7 @@
     }
 
     @media print {
-      .topbar, .bg-audio-symbol, #controls, #meetbox, #meetHistoryBox, #subsPanel, #subs, #review, .actions-row, #status, #meetingId, #historyNav {
+      .topbar, .bg-audio-symbol, #controls, #meetbox, #subsPanel, #subs, #review, .actions-row, #status, #meetingId, #historyNav {
         display: none !important;
       }
       body {
@@ -792,11 +801,6 @@
       </div>
 
       <div class="panel" id="report" hidden></div>
-
-      <div class="panel" id="meetHistoryBox" hidden>
-        <h2>History</h2>
-        <div id="meetHistoryList"></div>
-      </div>
     </section>
   </main>
 
@@ -812,7 +816,6 @@
     const fileNameInput = $("fileNameInput"), genBtn = $("genBtn"), genStatus = $("genStatus");
     const reportEl = $("report"), meetBox = $("meetbox"), liveChip = $("liveChip");
     const bridgeChip = $("bridgeChip"), bridgeText = $("bridgeText");
-    const meetHistoryBox = $("meetHistoryBox"), meetHistoryList = $("meetHistoryList");
 
     // Auth elements
     const userBar = $("userBar"), userGreeting = $("userGreeting"), logoutBtn = $("logoutBtn");
@@ -1088,7 +1091,6 @@
           $("sTitle").textContent = p.filename || p.id || "Saved Report";
           $("sLead").textContent = (p.mode === "lecture" ? "Lecture / video report" : "Google Meet report") + " \u00B7 Session ID: " + p.id;
           meetBox.hidden = true;
-          meetHistoryBox.hidden = true;
           resetSession();
           loadReport(p.id, p.mode, p.filename);
         } else {
@@ -1096,8 +1098,6 @@
           $("sTitle").textContent = m.title;
           $("sLead").textContent = m.lead;
           meetBox.hidden = v !== "meeting";
-          meetHistoryBox.hidden = v !== "meeting";
-          if (v === "meeting") renderMeetHistory();
           resetSession();
         }
       }
@@ -1153,6 +1153,43 @@
       } catch (e) { return null; }
     }
 
+    function removeRecent(id) {
+      try {
+        const list = loadRecent().filter(x => x.id !== id);
+        localStorage.setItem(recentStorageKey(), JSON.stringify(list));
+      } catch (e) { /* storage not available */ }
+    }
+
+    function removeCachedReportLocal(id) {
+      try {
+        const store = JSON.parse(localStorage.getItem(reportsStorageKey()) || "{}");
+        Object.keys(store).forEach(k => {
+          if (k === id || k.startsWith(id + "::")) delete store[k];
+        });
+        localStorage.setItem(reportsStorageKey(), JSON.stringify(store));
+      } catch (e) { /* storage not available */ }
+    }
+
+    // Delete one saved session: the report and the transcript on the server, then this list entry
+    async function deleteSession(item) {
+      const label = item.filename || item.id;
+      if (!confirm('Delete "' + label + '"?\n\nThe saved report and the transcript of this session will be removed. This cannot be undone.')) {
+        return;
+      }
+      try {
+        const res = await fetch("/api/report/" + encodeURIComponent(item.id) + "?user=" + encodeURIComponent(userScopeKey()), {
+          method: "DELETE"
+        });
+        if (!res.ok) throw new Error("server error " + res.status);
+      } catch (err) {
+        alert("Could not delete \"" + label + "\": " + err.message);
+        return;
+      }
+      removeRecent(item.id);
+      removeCachedReportLocal(item.id);
+      renderRecent();
+    }
+
     function renderRecent() {
       const box = $("recentBox");
       box.innerHTML = "";
@@ -1177,52 +1214,25 @@
         tr.appendChild(el("td", String(x.lines)));
         tr.appendChild(el("td", new Date(x.when).toLocaleString()));
         const td = document.createElement("td");
+        td.style.whiteSpace = "nowrap";
         const b = el("button", "Open report", "btn secondary small");
         b.onclick = ev => {
           ev.stopPropagation();
           openSaved(x.id, x.mode, x.filename);
         };
         td.appendChild(b);
+        const del = el("button", "Delete", "btn secondary small delete");
+        del.style.marginLeft = "8px";
+        del.onclick = ev => {
+          ev.stopPropagation();
+          deleteSession(x);
+        };
+        td.appendChild(del);
         tr.appendChild(td);
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
       box.appendChild(table);
-    }
-
-    function renderMeetHistory() {
-      meetHistoryList.innerHTML = "";
-      const list = loadRecent().filter(x => x.mode !== "lecture");
-      if (!list.length) {
-        meetHistoryList.appendChild(el("div", "No past Google Meet sessions yet for this account.", "empty"));
-        return;
-      }
-
-      const table = el("table", undefined, "recent-table");
-      const head = document.createElement("tr");
-      ["Session", "Lines", "Date", ""].forEach(h => head.appendChild(el("th", h)));
-      table.appendChild(head);
-
-      const tbody = document.createElement("tbody");
-      list.forEach(x => {
-        const tr = document.createElement("tr");
-        tr.title = "Click to open saved report";
-        tr.onclick = () => openSaved(x.id, "meeting", x.filename);
-        tr.appendChild(el("td", x.filename || x.id, "id"));
-        tr.appendChild(el("td", String(x.lines)));
-        tr.appendChild(el("td", new Date(x.when).toLocaleString()));
-        const td = document.createElement("td");
-        const b = el("button", "Open report", "btn secondary small");
-        b.onclick = ev => {
-          ev.stopPropagation();
-          openSaved(x.id, "meeting", x.filename);
-        };
-        td.appendChild(b);
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      meetHistoryList.appendChild(table);
     }
 
     function openSaved(id, mode, filename) {
